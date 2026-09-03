@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Leitor de Armário PWA</title>
+    
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#4caf50">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+
+    <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
+
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f4f4f9;
+            margin: 0;
+            padding: 15px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        h1 {
+            color: #333;
+            font-size: 1.3rem;
+            text-align: center;
+            margin-bottom: 10px;
+        }
+
+        #reader {
+            width: 100%;
+            max-width: 380px;
+            border: 2px solid #ccc;
+            border-radius: 8px;
+            background: #fff;
+            overflow: hidden;
+        }
+
+        .result-container {
+            margin-top: 15px;
+            padding: 15px;
+            width: 100%;
+            max-width: 380px;
+            background-color: #e8f5e9;
+            border: 2px solid #4caf50;
+            border-radius: 8px;
+            text-align: center;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+
+        .result-container h3 {
+            margin: 0 0 8px 0;
+            color: #2e7d32;
+            font-size: 1rem;
+        }
+
+        #product-name {
+            font-size: 1.2rem;
+            font-weight: bold;
+            color: #1b5e20;
+            margin: 5px 0;
+        }
+
+        #barcode-number {
+            font-size: 0.85rem;
+            color: #666;
+        }
+
+        img#product-img {
+            max-width: 90px;
+            margin-top: 8px;
+            display: none;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>Leitor de Armário / Estoque</h1>
+
+    <div id="reader"></div>
+
+    <div class="result-container">
+        <h3>Produto Identificado:</h3>
+        <p id="product-name">Aponte a câmera para o código...</p>
+        <p id="barcode-number"></p>
+        <img id="product-img" src="" alt="Foto do Produto">
+    </div>
+
+    <script>
+        let ultimaLeitura = "";
+
+        function onScanSuccess(decodedText, decodedResult) {
+            if (decodedText === ultimaLeitura) return;
+            ultimaLeitura = decodedText;
+
+            document.getElementById('barcode-number').innerText = `Código: ${decodedText}`;
+            
+            const elementoProduto = document.getElementById('product-name');
+            const imagemProduto = document.getElementById('product-img');
+            
+            elementoProduto.innerText = "Buscando produto na rede...";
+            elementoProduto.style.color = "#ff9800";
+            imagemProduto.style.display = "none";
+
+            // Consulta automática na API pública do Open Food Facts
+            const urlApi = `https://world.openfoodfacts.org/api/v0/product/${decodedText}.json`;
+
+            fetch(urlApi)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.status === 1) {
+                        const produto = data.product;
+                        const nome = produto.product_name || produto.product_name_pt || "Nome não informado";
+                        const marca = produto.brands ? `(${produto.brands})` : "";
+                        
+                        elementoProduto.innerText = `${nome} ${marca}`;
+                        elementoProduto.style.color = "#1b5e20";
+
+                        if (produto.image_front_url) {
+                            imagemProduto.src = produto.image_front_url;
+                            imagemProduto.style.display = "inline-block";
+                        }
+                    } else {
+                        elementoProduto.innerText = "Produto não cadastrado na base pública.";
+                        elementoProduto.style.color = "#d32f2f";
+                    }
+                })
+                .catch(error => {
+                    console.error("Erro:", error);
+                    elementoProduto.innerText = "Erro ao buscar na rede.";
+                    elementoProduto.style.color = "#d32f2f";
+                });
+        }
+
+        let html5QrcodeScanner = new Html5QrcodeScanner(
+            "reader", 
+            { fps: 10, qrbox: { width: 250, height: 150 } }, 
+            false
+        );
+        
+        html5QrcodeScanner.render(onScanSuccess);
+
+        // Registro do Service Worker para o PWA funcionar
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('sw.js')
+                .then(() => console.log("Service Worker registrado com sucesso!"))
+                .catch((err) => console.log("Erro ao registrar Service Worker:", err));
+        }
+    </script>
+
+</body>
+</html>
